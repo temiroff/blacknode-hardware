@@ -22,6 +22,7 @@ from blacknode_hardware import (
 from blacknode_hardware.service import HardwareRuntime
 from blacknode_hardware.service.server import create_server
 from blacknode_hardware.device_config import load_device_config
+from scripts.render_systemd_unit import render_unit, unit_quote
 
 
 def test_safety_limits_block_excess_speed():
@@ -120,6 +121,23 @@ def test_configuration_can_be_replaced_and_preserves_unspecified_settings(tmp_pa
     assert len(config["servos"]) == 7
 
 
+def test_systemd_unit_uses_validated_config_and_failure_restart(tmp_path: Path):
+    repo_dir = tmp_path / "blacknode-hardware"
+    config_path = repo_dir / ".blacknode-hardware" / "device.json"
+    unit = render_unit(
+        repo=repo_dir,
+        user="alex",
+        host="0.0.0.0",
+        port=8765,
+        config=config_path,
+    )
+    assert "User=alex" in unit
+    assert "ExecStartPre=" in unit
+    assert f"--config {unit_quote(str(config_path.resolve()))} --show" in unit
+    assert "Restart=on-failure" in unit
+    assert "WantedBy=multi-user.target" in unit
+
+
 def test_service_reports_unconfigured_hardware_honestly():
     runtime = HardwareRuntime(device_id="pi-device")
     assert runtime.status() == {
@@ -142,6 +160,33 @@ def test_service_health_and_status_endpoints():
             assert json.loads(response.read())["ok"] is True
         with urlopen(f"{base}/status") as response:
             assert json.loads(response.read())["device_id"] == "test-device"
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_service_check_distinguishes_service_health_from_hardware_readiness():
+    server = create_server(HardwareRuntime(device_id="test-device"), port=0)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    repo_dir = Path(__file__).parents[1]
+    command = [
+        sys.executable,
+        str(repo_dir / "scripts" / "service_check.py"),
+        "--url",
+        f"http://127.0.0.1:{server.server_port}",
+    ]
+    try:
+        service_only = subprocess.run(command, check=False, capture_output=True, text=True)
+        hardware_required = subprocess.run(
+            [*command, "--require-hardware"],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        assert service_only.returncode == 0
+        assert "[WARN] Hardware: not connected" in service_only.stdout
+        assert hardware_required.returncode == 2
     finally:
         server.shutdown()
         server.server_close()

@@ -95,7 +95,12 @@ same configuration, so the device can be reconfigured at any time:
 
 Settings not included in a reconfiguration command are preserved. Configuration
 and status monitoring are read-only and never enable torque or send goal
-positions.
+positions. If the persistent service is already installed, apply configuration
+changes with:
+
+```bash
+./service.sh restart
+```
 
 ## Development
 
@@ -108,25 +113,63 @@ The included I2C adapter is the first physical hardware path; it requires
 protocols belong in separate adapters and must implement the same contracts.
 Serial device discovery uses `pyserial` and is installed with the package.
 
-## Start on a Raspberry Pi
+## Run once on a Raspberry Pi
 
-From the Pi:
+For a foreground test that stops when the terminal closes:
 
 ```bash
-git pull --ff-only
-sudo ufw allow 8765/tcp
-sudo ufw reload
 ./start.sh
 ```
 
-The launcher uses:
+Press `Ctrl+C` before installing the persistent service.
+
+## Install the persistent service
+
+Install and start the systemd service:
+
+```bash
+./install-service.sh
+```
+
+The installer:
+
+- validates `.blacknode-hardware/device.json`
+- generates the service with the current repository path and Linux user
+- enables automatic startup after reboot
+- restarts the service after a failure
+- waits for the HTTP service and connected hardware to pass validation
+
+Re-running `install-service.sh` safely updates the existing service definition.
+Use the service manager afterward:
+
+```bash
+./service.sh status
+./service.sh check --require-hardware
+./service.sh restart
+./service.sh logs
+./service.sh follow
+./service.sh stop
+./service.sh start
+```
+
+`status` shows systemd state and performs a live HTTP check. `logs` shows the
+latest 100 journal entries; `follow` streams new entries until `Ctrl+C`.
+
+The service uses:
 
 ```text
 host: 0.0.0.0
 port: 8765
 ```
 
-It prints the Pi health URL. From your PC, open:
+Allow the port through Ubuntu's firewall once:
+
+```bash
+sudo ufw allow 8765/tcp
+sudo ufw reload
+```
+
+From your PC, open:
 
 ```text
 http://PI_IP_ADDRESS:8765/health
@@ -161,3 +204,7 @@ Test-NetConnection PI_IP_ADDRESS -Port 8765
 The health endpoint can work while status reports `"connected": false`; that
 means the service is reachable but one or more configured servos did not
 respond. Run `./probe.sh --servos 6` to check the serial connection directly.
+
+The current HTTP surface is intended for a trusted LAN and remains read-only.
+Authentication must be added before deployment or motion endpoints are
+enabled.
