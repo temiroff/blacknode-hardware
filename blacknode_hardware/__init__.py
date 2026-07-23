@@ -3,7 +3,12 @@
 from .contracts import DeviceState, MobileBaseCommand, MobileBaseProvider
 from .mock import MockMobileBase
 from .safety import SafetyGate, SafetyLimits
-from . import node_types  # noqa: F401  # registers Blacknode nodes
+try:
+    from . import node_types  # noqa: F401  # registers Blacknode nodes
+except ModuleNotFoundError as exc:
+    # Direct adapter deployments do not need the Blacknode graph runtime.
+    if exc.name != "blacknode":
+        raise
 from .adapters import I2CMecanumBase, I2CMecanumConfig
 
 __all__ = [
