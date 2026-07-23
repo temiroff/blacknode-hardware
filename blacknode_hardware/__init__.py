@@ -8,7 +8,10 @@ except ModuleNotFoundError as exc:
     # Direct adapter deployments do not need the Blacknode graph runtime.
     if exc.name != "blacknode":
         raise
-from .adapters import I2CMecanumBase, I2CMecanumConfig
+from .adapters import (
+    I2CMecanumBase, I2CMecanumConfig, SerialJointConfig,
+    SerialJointGroup, SerialJointSpec, probe_serial,
+)
 from .joint_group import JointGroupCommand, JointGroupProvider, JointGroupState
 
 __all__ = [
@@ -19,6 +22,10 @@ __all__ = [
     "SafetyLimits",
     "I2CMecanumBase",
     "I2CMecanumConfig",
+    "SerialJointConfig",
+    "SerialJointGroup",
+    "SerialJointSpec",
+    "probe_serial",
     "JointGroupCommand",
     "JointGroupProvider",
     "JointGroupState",

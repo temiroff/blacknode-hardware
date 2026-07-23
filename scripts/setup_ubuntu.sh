@@ -30,7 +30,7 @@ python3 -m venv .venv
 # shellcheck disable=SC1091
 source .venv/bin/activate
 python -m pip install --upgrade pip
-python -m pip install -e . smbus2 pyserial
+python -m pip install -e . smbus2 pyserial feetech-servo-sdk
 
 echo
 echo "Running readiness checks..."

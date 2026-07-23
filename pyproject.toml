@@ -7,7 +7,7 @@ name = "blacknode-hardware"
 version = "0.1.0"
 description = "Generic hardware contracts and safe device-control foundations for Blacknode."
 requires-python = ">=3.11"
-dependencies = ["pyserial>=3.5"]
+dependencies = ["pyserial>=3.5", "feetech-servo-sdk>=1.0"]
 
 [tool.setuptools.packages.find]
 include = ["blacknode_hardware*"]

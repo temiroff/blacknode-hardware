@@ -67,6 +67,23 @@ Discover connected serial devices:
 ./discover.sh
 ```
 
+Perform the first real hardware check with a read-only actuator probe:
+
+```bash
+./probe.sh
+```
+
+The probe scans serial IDs 1 through 20 and reads present positions only. It
+does not enable torque, write goal positions, or move the arm. Override the
+defaults when required:
+
+```bash
+BLACKNODE_SERIAL_PORT=/dev/ttyACM0 \
+BLACKNODE_SERIAL_BAUDRATE=1000000 \
+BLACKNODE_SERVO_IDS=1-6 \
+./probe.sh
+```
+
 ## Development
 
 ```powershell

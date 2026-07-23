@@ -1,0 +1,222 @@
+"""Real serial bus adapter for position-controlled joint groups."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+import time
+from typing import Any
+
+from ..joint_group import JointGroupCommand, JointGroupState
+
+
+TICKS_PER_REV = 4096
+ADDR_TORQUE_ENABLE = 40
+ADDR_GOAL_POSITION = 42
+ADDR_PRESENT_POSITION = 56
+
+
+@dataclass(frozen=True)
+class SerialJointSpec:
+    name: str
+    servo_id: int
+    min_deg: float = -180.0
+    max_deg: float = 180.0
+    home_ticks: int = 2048
+    invert: bool = False
+
+    def __post_init__(self) -> None:
+        if not 1 <= self.servo_id <= 253:
+            raise ValueError(f"servo id must be between 1 and 253: {self.servo_id}")
+        if self.min_deg >= self.max_deg:
+            raise ValueError(f"minimum must be below maximum for {self.name}")
+        if not 0 <= self.home_ticks < TICKS_PER_REV:
+            raise ValueError(f"home ticks must be between 0 and {TICKS_PER_REV - 1}")
+
+
+@dataclass(frozen=True)
+class SerialJointConfig:
+    port: str
+    baudrate: int = 1_000_000
+    joints: tuple[SerialJointSpec, ...] = ()
+
+
+def ticks_to_degrees(ticks: int, joint: SerialJointSpec) -> float:
+    value = (int(ticks) - joint.home_ticks) * 360.0 / TICKS_PER_REV
+    return -value if joint.invert else value
+
+
+def degrees_to_ticks(degrees: float, joint: SerialJointSpec) -> int:
+    value = -float(degrees) if joint.invert else float(degrees)
+    ticks = joint.home_ticks + round(value * TICKS_PER_REV / 360.0)
+    return max(0, min(TICKS_PER_REV - 1, ticks))
+
+
+def load_sdk() -> Any:
+    try:
+        import scservo_sdk
+    except Exception as exc:
+        raise RuntimeError("install feetech-servo-sdk to use the serial joint adapter") from exc
+    return scservo_sdk
+
+
+def _open(sdk: Any, config: SerialJointConfig) -> tuple[Any, Any]:
+    if not config.port:
+        raise ValueError("serial port is required")
+    port = sdk.PortHandler(config.port)
+    if not port.openPort() or not port.setBaudRate(config.baudrate):
+        try:
+            port.closePort()
+        except Exception:
+            pass
+        raise RuntimeError(f"could not open {config.port} at {config.baudrate} baud")
+    return port, sdk.PacketHandler(0)
+
+
+def read_position(sdk: Any, packet: Any, port: Any, servo_id: int) -> int | None:
+    try:
+        ticks, comm_result, servo_error = packet.read2ByteTxRx(port, servo_id, ADDR_PRESENT_POSITION)
+    except Exception:
+        return None
+    if comm_result != sdk.COMM_SUCCESS or servo_error != 0:
+        return None
+    return int(ticks)
+
+
+def probe_serial(config: SerialJointConfig) -> dict[str, Any]:
+    """Read present positions only. This function performs no writes."""
+    sdk = load_sdk()
+    port, packet = _open(sdk, config)
+    readings: dict[str, dict[str, Any]] = {}
+    errors: list[str] = []
+    try:
+        for joint in config.joints:
+            ticks = read_position(sdk, packet, port, joint.servo_id)
+            if ticks is None:
+                errors.append(f"no position response from servo {joint.servo_id} ({joint.name})")
+                continue
+            readings[joint.name] = {
+                "servo_id": joint.servo_id,
+                "ticks": ticks,
+                "degrees": ticks_to_degrees(ticks, joint),
+            }
+    finally:
+        port.closePort()
+    return {"ok": bool(readings), "readings": readings, "errors": errors}
+
+
+class SerialJointGroup:
+    """Real serial actuator provider with torque-safe lifecycle behavior."""
+
+    def __init__(self, config: SerialJointConfig) -> None:
+        if not config.joints:
+            raise ValueError("at least one joint is required")
+        self.config = config
+        self._sdk: Any | None = None
+        self._port: Any | None = None
+        self._packet: Any | None = None
+        self._state = JointGroupState(
+            device_id=config.port,
+            connected=False,
+            armed=False,
+            joint_names=[joint.name for joint in config.joints],
+            positions={},
+            limits={joint.name: {"min": joint.min_deg, "max": joint.max_deg} for joint in config.joints},
+        )
+
+    def connect(self) -> JointGroupState:
+        self._sdk = load_sdk()
+        self._port, self._packet = _open(self._sdk, self.config)
+        self._state.connected = True
+        self.refresh()
+        return self._state
+
+    def refresh(self) -> JointGroupState:
+        if not self._sdk or not self._port or not self._packet:
+            raise ConnectionError("serial joint adapter is not connected")
+        readings: dict[str, float] = {}
+        for joint in self.config.joints:
+            ticks = read_position(self._sdk, self._packet, self._port, joint.servo_id)
+            if ticks is None:
+                raise RuntimeError(f"could not read position for {joint.name} (servo {joint.servo_id})")
+            readings[joint.name] = ticks_to_degrees(ticks, joint)
+        self._state.positions = readings
+        self._state.updated_at = time.time()
+        return self._state
+
+    def state(self) -> JointGroupState:
+        return self._state
+
+    def arm(self) -> JointGroupState:
+        if not self._sdk or not self._port or not self._packet:
+            raise ConnectionError("serial joint adapter is not connected")
+        current_ticks: dict[int, int] = {}
+        for joint in self.config.joints:
+            ticks = read_position(self._sdk, self._packet, self._port, joint.servo_id)
+            if ticks is None:
+                self.disarm()
+                raise RuntimeError(f"could not read current position for {joint.name}")
+            current_ticks[joint.servo_id] = ticks
+        try:
+            for joint in self.config.joints:
+                self._write_goal(joint.servo_id, current_ticks[joint.servo_id])
+            for joint in self.config.joints:
+                self._set_torque(joint.servo_id, True)
+        except Exception:
+            self.disarm()
+            raise
+        self._state.armed = True
+        self.refresh()
+        return self._state
+
+    def disarm(self) -> JointGroupState:
+        if self._sdk and self._port and self._packet:
+            for joint in self.config.joints:
+                try:
+                    self._set_torque(joint.servo_id, False)
+                except Exception:
+                    pass
+        self._state.armed = False
+        self._state.updated_at = time.time()
+        return self._state
+
+    def stop(self) -> JointGroupState:
+        return self.disarm()
+
+    def command(self, command: JointGroupCommand) -> JointGroupState:
+        if not self._state.armed:
+            raise PermissionError("joint motion is disarmed")
+        if not command.is_fresh():
+            raise TimeoutError("joint command is stale")
+        if not self._sdk or not self._port or not self._packet:
+            raise ConnectionError("serial joint adapter is not connected")
+        joints = {joint.name: joint for joint in self.config.joints}
+        for name, degrees in command.positions.items():
+            joint = joints.get(name)
+            if joint is None:
+                raise ValueError(f"unknown joint: {name}")
+            if not joint.min_deg <= degrees <= joint.max_deg:
+                raise ValueError(f"{name} is outside its configured limits")
+            self._write_goal(joint.servo_id, degrees_to_ticks(degrees, joint))
+        self.refresh()
+        return self._state
+
+    def close(self) -> None:
+        self.disarm()
+        if self._port:
+            self._port.closePort()
+        self._port = None
+        self._packet = None
+        self._sdk = None
+        self._state.connected = False
+
+    def _write_goal(self, servo_id: int, ticks: int) -> None:
+        result, error = self._packet.write2ByteTxRx(self._port, servo_id, ADDR_GOAL_POSITION, ticks)
+        if result != self._sdk.COMM_SUCCESS or error != 0:
+            raise RuntimeError(f"goal write failed for servo {servo_id}")
+
+    def _set_torque(self, servo_id: int, enabled: bool) -> None:
+        result, error = self._packet.write1ByteTxRx(
+            self._port, servo_id, ADDR_TORQUE_ENABLE, 1 if enabled else 0
+        )
+        if result != self._sdk.COMM_SUCCESS or error != 0:
+            raise RuntimeError(f"torque {'enable' if enabled else 'disable'} failed for servo {servo_id}")

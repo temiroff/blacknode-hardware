@@ -7,6 +7,7 @@ import json
 
 from blacknode_hardware import (
     I2CMecanumBase,
+    SerialJointSpec,
     JointGroupCommand,
     JointGroupState,
     MobileBaseCommand,
@@ -48,6 +49,14 @@ def test_joint_state_serializes_without_hardware():
     payload = state.as_dict()
     assert payload["device_id"] == "arm-0"
     assert payload["connected"] is False
+
+
+def test_serial_joint_position_conversion_is_bounded_and_reversible():
+    joint = SerialJointSpec("joint_1", servo_id=1, home_ticks=2048)
+    assert round((joint.home_ticks + 512 - joint.home_ticks) * 360 / 4096, 5) == 45.0
+    from blacknode_hardware.adapters.serial_joint import degrees_to_ticks, ticks_to_degrees
+    assert degrees_to_ticks(45.0, joint) == 2560
+    assert ticks_to_degrees(2560, joint) == 45.0
 
 
 def test_service_reports_unconfigured_hardware_honestly():
