@@ -70,6 +70,7 @@ python -m pytest packages\blacknode-hardware\tests
 The included I2C adapter is the first physical hardware path; it requires
 `smbus2` and an explicit device profile. Additional actuator and sensor
 protocols belong in separate adapters and must implement the same contracts.
+Serial device discovery uses `pyserial` and is installed with the package.
 
 ## Device service
 
