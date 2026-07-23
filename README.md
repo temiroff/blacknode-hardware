@@ -45,6 +45,12 @@ python scripts/hardware_doctor.py --probe-address --bus 1 --address 0x7A
 The default check does not touch the I2C bus. The optional address probe is
 read-only and does not send motor commands.
 
+When no physical device is connected, check only the software installation:
+
+```bash
+./check.sh --software-only
+```
+
 For a guided Ubuntu setup:
 
 ```bash
