@@ -8,6 +8,7 @@ import os
 from pathlib import Path
 import platform
 import shutil
+import subprocess
 import sys
 
 
@@ -38,11 +39,22 @@ def main() -> int:
 
     if args.probe_address:
         try:
-            from smbus2 import SMBus
-
-            with SMBus(args.bus) as bus:
-                bus.read_byte(args.address)
-            results.append(check("I2C address", True, f"0x{args.address:02x} responded on bus {args.bus}"))
+            if i2cdetect is None:
+                raise RuntimeError("i2cdetect is not installed")
+            scan = subprocess.run(
+                [i2cdetect, "-y", str(args.bus), hex(args.address), hex(args.address)],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            token = f"{args.address:02x}"
+            responded = token in scan.stdout.lower().split()
+            detail = (
+                f"0x{args.address:02x} detected on bus {args.bus}"
+                if responded
+                else f"0x{args.address:02x} not detected; scan output: {scan.stdout.strip() or scan.stderr.strip()}"
+            )
+            results.append(check("I2C address", responded, detail))
         except Exception as exc:
             results.append(check("I2C address", False, f"0x{args.address:02x} did not respond: {exc}"))
     else:
