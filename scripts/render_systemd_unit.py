@@ -14,6 +14,15 @@ def unit_quote(value: str) -> str:
     return f'"{escaped}"'
 
 
+def working_directory_value(value: str) -> str:
+    """Render a WorkingDirectory value without shell-style quotes."""
+    if "\n" in value or "\r" in value:
+        raise ValueError("systemd values cannot contain newlines")
+    if any(character.isspace() for character in value) or "\\" in value or '"' in value:
+        raise ValueError("the service repository path cannot contain spaces, quotes, or backslashes")
+    return value.replace("%", "%%")
+
+
 def render_unit(
     *,
     repo: Path,
@@ -47,7 +56,7 @@ def render_unit(
             "[Service]",
             "Type=simple",
             f"User={user}",
-            f"WorkingDirectory={unit_quote(str(repo))}",
+            f"WorkingDirectory={working_directory_value(str(repo))}",
             'Environment="PYTHONUNBUFFERED=1"',
             (
                 f"ExecStartPre={unit_quote(str(python))} "

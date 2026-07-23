@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import pytest
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -22,7 +23,7 @@ from blacknode_hardware import (
 from blacknode_hardware.service import HardwareRuntime
 from blacknode_hardware.service.server import create_server
 from blacknode_hardware.device_config import load_device_config
-from scripts.render_systemd_unit import render_unit, unit_quote
+from scripts.render_systemd_unit import render_unit, unit_quote, working_directory_value
 
 
 def test_safety_limits_block_excess_speed():
@@ -121,6 +122,7 @@ def test_configuration_can_be_replaced_and_preserves_unspecified_settings(tmp_pa
     assert len(config["servos"]) == 7
 
 
+@pytest.mark.skipif(os.name == "nt", reason="systemd units use POSIX paths")
 def test_systemd_unit_uses_validated_config_and_failure_restart(tmp_path: Path):
     repo_dir = tmp_path / "blacknode-hardware"
     config_path = repo_dir / ".blacknode-hardware" / "device.json"
@@ -132,10 +134,18 @@ def test_systemd_unit_uses_validated_config_and_failure_restart(tmp_path: Path):
         config=config_path,
     )
     assert "User=alex" in unit
+    assert "WorkingDirectory=" in unit
+    assert 'WorkingDirectory="' not in unit
     assert "ExecStartPre=" in unit
     assert f"--config {unit_quote(str(config_path.resolve()))} --show" in unit
     assert "Restart=on-failure" in unit
     assert "WantedBy=multi-user.target" in unit
+
+
+def test_systemd_working_directory_is_unquoted_absolute_path():
+    value = working_directory_value("/home/alex/blacknode-hardware")
+    assert value == "/home/alex/blacknode-hardware"
+    assert not value.startswith('"')
 
 
 def test_service_reports_unconfigured_hardware_honestly():
