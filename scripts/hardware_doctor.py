@@ -13,10 +13,10 @@ import sys
 
 
 _USE_COLOR = sys.stdout.isatty() and "NO_COLOR" not in os.environ
-_GREEN = "\\033[32m"
-_RED = "\\033[31m"
-_YELLOW = "\\033[33m"
-_RESET = "\\033[0m"
+_GREEN = "\u001b[32m"
+_RED = "\u001b[31m"
+_YELLOW = "\u001b[33m"
+_RESET = "\u001b[0m"
 
 
 def paint(value: str, color: str) -> str:
