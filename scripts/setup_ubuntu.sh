@@ -51,4 +51,5 @@ echo "  ./probe.sh --servos 6"
 echo
 echo "After configuring the device, install the persistent service:"
 echo "  ./configure.sh --servos 6"
+echo "  ./pair.sh"
 echo "  ./install-service.sh"

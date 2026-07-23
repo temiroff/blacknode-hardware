@@ -30,15 +30,18 @@ def render_unit(
     host: str,
     port: int,
     config: Path,
+    auth_token_file: Path,
 ) -> str:
     repo = repo.resolve()
     config = config.resolve()
+    auth_token_file = auth_token_file.resolve()
     python = repo / ".venv" / "bin" / "python"
     configure_script = repo / "scripts" / "configure_device.py"
+    pairing_script = repo / "scripts" / "pair_device.py"
     service_script = repo / "scripts" / "hardware_service.py"
 
-    if not repo.is_absolute() or not config.is_absolute():
-        raise ValueError("repository and configuration paths must be absolute")
+    if not repo.is_absolute() or not config.is_absolute() or not auth_token_file.is_absolute():
+        raise ValueError("repository, configuration, and token paths must be absolute")
     if not re.fullmatch(r"[A-Za-z0-9_.-]+", user):
         raise ValueError("service user contains unsupported characters")
     if not 1 <= port <= 65535:
@@ -64,10 +67,17 @@ def render_unit(
                 f"--config {unit_quote(str(config))} --show"
             ),
             (
+                f"ExecStartPre={unit_quote(str(python))} "
+                f"{unit_quote(str(pairing_script))} "
+                f"--config {unit_quote(str(config))} "
+                f"--token-file {unit_quote(str(auth_token_file))} --validate"
+            ),
+            (
                 f"ExecStart={unit_quote(str(python))} "
                 f"{unit_quote(str(service_script))} "
                 f"--host {unit_quote(host)} --port {port} "
-                f"--config {unit_quote(str(config))}"
+                f"--config {unit_quote(str(config))} "
+                f"--auth-token-file {unit_quote(str(auth_token_file))} --require-auth"
             ),
             "Restart=on-failure",
             "RestartSec=2s",
@@ -92,6 +102,7 @@ def main() -> int:
     parser.add_argument("--host", default="0.0.0.0")
     parser.add_argument("--port", type=int, default=8765)
     parser.add_argument("--config", type=Path, required=True)
+    parser.add_argument("--auth-token-file", type=Path, required=True)
     args = parser.parse_args()
     print(
         render_unit(
@@ -100,6 +111,7 @@ def main() -> int:
             host=args.host,
             port=args.port,
             config=args.config,
+            auth_token_file=args.auth_token_file,
         ),
         end="",
     )

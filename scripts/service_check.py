@@ -8,15 +8,19 @@ import sys
 import time
 from typing import Any
 from urllib.error import URLError
-from urllib.request import urlopen
+from urllib.request import Request, urlopen
+
+from blacknode_hardware.auth import load_auth_token
 
 
 def color(code: str, text: str) -> str:
     return f"\033[{code}m{text}\033[0m" if sys.stdout.isatty() else text
 
 
-def get_json(url: str, timeout: float = 5.0) -> dict[str, Any]:
-    with urlopen(url, timeout=timeout) as response:
+def get_json(url: str, timeout: float = 5.0, token: str | None = None) -> dict[str, Any]:
+    headers = {"Authorization": f"Bearer {token}"} if token else {}
+    request = Request(url, headers=headers)
+    with urlopen(request, timeout=timeout) as response:
         value = json.loads(response.read())
     if not isinstance(value, dict):
         raise ValueError(f"{url} did not return a JSON object")
@@ -28,7 +32,12 @@ def main() -> int:
     parser.add_argument("--url", default="http://127.0.0.1:8765")
     parser.add_argument("--wait", type=float, default=0.0)
     parser.add_argument("--require-hardware", action="store_true")
+    parser.add_argument("--token-file")
     args = parser.parse_args()
+    try:
+        token = load_auth_token(args.token_file) if args.token_file else None
+    except (FileNotFoundError, ValueError) as exc:
+        parser.error(str(exc))
 
     base_url = args.url.rstrip("/")
     deadline = time.monotonic() + max(0.0, args.wait)
@@ -54,13 +63,18 @@ def main() -> int:
     print(f"{color('32', '[OK]')} Service: {base_url}")
 
     try:
-        status = get_json(f"{base_url}/status")
-        capabilities = get_json(f"{base_url}/capabilities")
+        if health.get("auth_required") and not token:
+            print(f"{color('31', '[FAIL]')} Authentication: pairing token required")
+            return 1
+        status = get_json(f"{base_url}/status", token=token)
+        capabilities = get_json(f"{base_url}/capabilities", token=token)
     except (OSError, URLError, ValueError, json.JSONDecodeError) as exc:
         print(f"{color('31', '[FAIL]')} Status: {exc}")
         return 1
 
     connected = status.get("connected") is True
+    if health.get("auth_required"):
+        print(f"{color('32', '[OK]')} Authentication: pairing token accepted")
     marker = color("32", "[OK]") if connected else color("33", "[WARN]")
     print(f"{marker} Hardware: {'connected' if connected else 'not connected'}")
     print(f"  Device ID: {status.get('device_id', 'unknown')}")

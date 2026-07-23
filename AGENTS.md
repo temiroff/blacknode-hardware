@@ -17,6 +17,10 @@ Safety requirements:
 - Do not add mock, fake, simulated, or hardcoded hardware providers.
 - Hardware-free tests may validate contracts and configuration but must not
   pretend that a physical device responded.
+- Never write pairing tokens to service logs or place them in process
+  arguments, tracked files, URLs, or deployment artifacts.
+- Deployment and motion endpoints require authenticated transport and must
+  never be enabled in unauthenticated mode.
 - Optional hardware dependencies must not break package discovery.
 
 Verification:

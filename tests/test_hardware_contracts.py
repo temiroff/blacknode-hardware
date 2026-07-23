@@ -6,7 +6,8 @@ from pathlib import Path
 import subprocess
 import sys
 import threading
-from urllib.request import urlopen
+from urllib.error import HTTPError
+from urllib.request import Request, urlopen
 import json
 
 from blacknode_hardware import (
@@ -23,6 +24,12 @@ from blacknode_hardware import (
 from blacknode_hardware.service import HardwareRuntime
 from blacknode_hardware.service.server import create_server
 from blacknode_hardware.device_config import load_device_config
+from blacknode_hardware.auth import (
+    authorization_matches,
+    load_auth_token,
+    save_auth_token,
+    token_fingerprint,
+)
 from scripts.render_systemd_unit import render_unit, unit_quote, working_directory_value
 
 
@@ -126,18 +133,22 @@ def test_configuration_can_be_replaced_and_preserves_unspecified_settings(tmp_pa
 def test_systemd_unit_uses_validated_config_and_failure_restart(tmp_path: Path):
     repo_dir = tmp_path / "blacknode-hardware"
     config_path = repo_dir / ".blacknode-hardware" / "device.json"
+    token_path = repo_dir / ".blacknode-hardware" / "auth.token"
     unit = render_unit(
         repo=repo_dir,
         user="alex",
         host="0.0.0.0",
         port=8765,
         config=config_path,
+        auth_token_file=token_path,
     )
     assert "User=alex" in unit
     assert "WorkingDirectory=" in unit
     assert 'WorkingDirectory="' not in unit
     assert "ExecStartPre=" in unit
     assert f"--config {unit_quote(str(config_path.resolve()))} --show" in unit
+    assert f"--auth-token-file {unit_quote(str(token_path.resolve()))}" in unit
+    assert "--require-auth" in unit
     assert "Restart=on-failure" in unit
     assert "WantedBy=multi-user.target" in unit
 
@@ -146,6 +157,19 @@ def test_systemd_working_directory_is_unquoted_absolute_path():
     value = working_directory_value("/home/alex/blacknode-hardware")
     assert value == "/home/alex/blacknode-hardware"
     assert not value.startswith('"')
+
+
+def test_pairing_token_is_private_and_timing_safe(tmp_path: Path):
+    token_path, token = save_auth_token(tmp_path / "auth.token")
+    assert load_auth_token(token_path) == token
+    assert len(token) >= 32
+    assert len(token_fingerprint(token)) == 12
+    assert authorization_matches(f"Bearer {token}", token)
+    assert authorization_matches(f"bearer {token}", token)
+    assert not authorization_matches("Bearer wrong", token)
+    assert not authorization_matches(None, token)
+    if os.name != "nt":
+        assert token_path.stat().st_mode & 0o777 == 0o600
 
 
 def test_service_reports_unconfigured_hardware_honestly():
@@ -175,6 +199,33 @@ def test_service_health_and_status_endpoints():
         server.server_close()
 
 
+def test_paired_service_keeps_health_public_and_protects_device_data():
+    token = "a" * 43
+    server = create_server(HardwareRuntime(device_id="paired-device"), port=0, auth_token=token)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    base = f"http://127.0.0.1:{server.server_port}"
+    try:
+        with urlopen(f"{base}/health") as response:
+            health = json.loads(response.read())
+        assert health["auth_required"] is True
+
+        with pytest.raises(HTTPError) as missing:
+            urlopen(f"{base}/status")
+        assert missing.value.code == 401
+
+        request = Request(
+            f"{base}/status",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        with urlopen(request) as response:
+            status = json.loads(response.read())
+        assert status["device_id"] == "paired-device"
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
 def test_service_check_distinguishes_service_health_from_hardware_readiness():
     server = create_server(HardwareRuntime(device_id="test-device"), port=0)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
@@ -182,21 +233,70 @@ def test_service_check_distinguishes_service_health_from_hardware_readiness():
     repo_dir = Path(__file__).parents[1]
     command = [
         sys.executable,
-        str(repo_dir / "scripts" / "service_check.py"),
+        "-m",
+        "scripts.service_check",
         "--url",
         f"http://127.0.0.1:{server.server_port}",
     ]
     try:
-        service_only = subprocess.run(command, check=False, capture_output=True, text=True)
+        service_only = subprocess.run(
+            command,
+            check=False,
+            capture_output=True,
+            text=True,
+            cwd=repo_dir,
+        )
         hardware_required = subprocess.run(
             [*command, "--require-hardware"],
             check=False,
             capture_output=True,
             text=True,
+            cwd=repo_dir,
         )
         assert service_only.returncode == 0
         assert "[WARN] Hardware: not connected" in service_only.stdout
         assert hardware_required.returncode == 2
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_service_check_uses_saved_pairing_token(tmp_path: Path):
+    token_path, token = save_auth_token(tmp_path / "auth.token")
+    server = create_server(
+        HardwareRuntime(device_id="paired-device"),
+        port=0,
+        auth_token=token,
+    )
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    repo_dir = Path(__file__).parents[1]
+    base_command = [
+        sys.executable,
+        "-m",
+        "scripts.service_check",
+        "--url",
+        f"http://127.0.0.1:{server.server_port}",
+    ]
+    try:
+        missing = subprocess.run(
+            base_command,
+            check=False,
+            capture_output=True,
+            text=True,
+            cwd=repo_dir,
+        )
+        paired = subprocess.run(
+            [*base_command, "--token-file", str(token_path)],
+            check=False,
+            capture_output=True,
+            text=True,
+            cwd=repo_dir,
+        )
+        assert missing.returncode == 1
+        assert "pairing token required" in missing.stdout
+        assert paired.returncode == 0
+        assert "[OK] Authentication: pairing token accepted" in paired.stdout
     finally:
         server.shutdown()
         server.server_close()

@@ -5,6 +5,7 @@ repo_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 venv_python="$repo_dir/.venv/bin/python"
 unit_name="blacknode-hardware.service"
 port="${BLACKNODE_HARDWARE_PORT:-8765}"
+token_file="${BLACKNODE_AUTH_TOKEN_FILE:-$repo_dir/.blacknode-hardware/auth.token}"
 
 usage() {
   echo "Usage: ./service.sh COMMAND"
@@ -36,8 +37,11 @@ fi
 shift
 
 check_service() {
-  "$venv_python" "$repo_dir/scripts/service_check.py" \
-    --url "http://127.0.0.1:$port" "$@"
+  check_args=(--url "http://127.0.0.1:$port")
+  if [[ -f "$token_file" ]]; then
+    check_args+=(--token-file "$token_file")
+  fi
+  "$venv_python" "$repo_dir/scripts/service_check.py" "${check_args[@]}" "$@"
 }
 
 case "$command_name" in

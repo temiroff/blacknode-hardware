@@ -102,6 +102,31 @@ changes with:
 ./service.sh restart
 ```
 
+## Pair the device
+
+Create a private device token before installing the persistent service:
+
+```bash
+./pair.sh
+```
+
+The token is stored at `.blacknode-hardware/auth.token`, outside Git, with
+owner-only file permissions. Save the displayed token for the Blacknode editor
+device connection. Pairing can be inspected or replaced later:
+
+```bash
+./pair.sh --show
+./pair.sh --rotate
+```
+
+Rotation immediately invalidates the previous token and restarts an active
+hardware service. `/health` remains public for reachability checks.
+`/status`, `/capabilities`, and `/rpc` require:
+
+```text
+Authorization: Bearer PAIRING_TOKEN
+```
+
 ## Development
 
 ```powershell
@@ -128,12 +153,14 @@ Press `Ctrl+C` before installing the persistent service.
 Install and start the systemd service:
 
 ```bash
+./pair.sh
 ./install-service.sh
 ```
 
 The installer:
 
 - validates `.blacknode-hardware/device.json`
+- validates the private pairing token
 - generates the service with the current repository path and Linux user
 - enables automatic startup after reboot
 - restarts the service after a failure
@@ -169,18 +196,25 @@ sudo ufw allow 8765/tcp
 sudo ufw reload
 ```
 
-From your PC, open:
+From your PC, the public health URL can be opened directly:
 
 ```text
 http://PI_IP_ADDRESS:8765/health
-http://PI_IP_ADDRESS:8765/status
-http://PI_IP_ADDRESS:8765/capabilities
 ```
 
 For example:
 
 ```text
 http://192.168.1.87:8765/health
+```
+
+Use the pairing token for protected endpoints. From PowerShell:
+
+```powershell
+$token = Read-Host "Pairing token"
+$headers = @{ Authorization = "Bearer $token" }
+Invoke-RestMethod http://PI_IP_ADDRESS:8765/status -Headers $headers
+Invoke-RestMethod http://PI_IP_ADDRESS:8765/capabilities -Headers $headers
 ```
 
 `/status` refreshes all configured servo positions on every request. It
@@ -205,6 +239,6 @@ The health endpoint can work while status reports `"connected": false`; that
 means the service is reachable but one or more configured servos did not
 respond. Run `./probe.sh --servos 6` to check the serial connection directly.
 
-The current HTTP surface is intended for a trusted LAN and remains read-only.
-Authentication must be added before deployment or motion endpoints are
-enabled.
+Pairing authenticates access but plain HTTP does not encrypt the token or
+traffic. Keep the service on a trusted LAN. Use a VPN or HTTPS before internet
+exposure, deployment uploads, or motion control.

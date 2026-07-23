@@ -4,6 +4,7 @@ set -euo pipefail
 repo_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 venv_python="$repo_dir/.venv/bin/python"
 config="${BLACKNODE_HARDWARE_CONFIG:-$repo_dir/.blacknode-hardware/device.json}"
+token_file="${BLACKNODE_AUTH_TOKEN_FILE:-$repo_dir/.blacknode-hardware/auth.token}"
 host="${BLACKNODE_HARDWARE_HOST:-0.0.0.0}"
 port="${BLACKNODE_HARDWARE_PORT:-8765}"
 service_user="$(id -un)"
@@ -37,6 +38,11 @@ if [[ ! -f "$config" ]]; then
   echo "Run ./configure.sh --servos 6 first."
   exit 1
 fi
+if [[ ! -f "$token_file" ]]; then
+  echo "No pairing token found."
+  echo "Run ./pair.sh first."
+  exit 1
+fi
 if ! command -v systemctl >/dev/null 2>&1; then
   echo "systemd is not available on this device."
   exit 1
@@ -44,6 +50,12 @@ fi
 
 echo "Validating hardware configuration..."
 "$venv_python" "$repo_dir/scripts/configure_device.py" --config "$config" --show
+echo
+echo "Validating pairing credentials..."
+"$venv_python" "$repo_dir/scripts/pair_device.py" \
+  --config "$config" \
+  --token-file "$token_file" \
+  --validate
 
 unit_file="$(mktemp --suffix=.service)"
 unit_new="${unit_path}.new"
@@ -57,7 +69,8 @@ trap cleanup EXIT
   --user "$service_user" \
   --host "$host" \
   --port "$port" \
-  --config "$config" > "$unit_file"
+  --config "$config" \
+  --auth-token-file "$token_file" > "$unit_file"
 
 if command -v systemd-analyze >/dev/null 2>&1; then
   systemd-analyze verify "$unit_file"
