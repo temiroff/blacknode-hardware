@@ -42,7 +42,7 @@ def main() -> int:
             if i2cdetect is None:
                 raise RuntimeError("i2cdetect is not installed")
             scan = subprocess.run(
-                [i2cdetect, "-y", str(args.bus), hex(args.address), hex(args.address)],
+                [i2cdetect, "-y", "-a", str(args.bus), hex(args.address), hex(args.address)],
                 capture_output=True,
                 text=True,
                 check=False,
