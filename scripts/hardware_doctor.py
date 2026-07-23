@@ -12,8 +12,20 @@ import subprocess
 import sys
 
 
+_USE_COLOR = sys.stdout.isatty() and "NO_COLOR" not in os.environ
+_GREEN = "\\033[32m"
+_RED = "\\033[31m"
+_YELLOW = "\\033[33m"
+_RESET = "\\033[0m"
+
+
+def paint(value: str, color: str) -> str:
+    return f"{color}{value}{_RESET}" if _USE_COLOR else value
+
+
 def check(label: str, ok: bool, detail: str) -> bool:
-    print(f"[{'OK' if ok else 'FAIL'}] {label}: {detail}")
+    status = paint("[OK]", _GREEN) if ok else paint("[FAIL]", _RED)
+    print(f"{status} {label}: {detail}")
     return ok
 
 
@@ -37,6 +49,7 @@ def main() -> int:
     access = bus_path.exists() and os.access(bus_path, os.R_OK | os.W_OK)
     results.append(check("I2C access", access, "read/write access" if access else "check i2c group membership and reconnect"))
 
+    address_ok: bool | None = None
     if args.probe_address:
         try:
             if i2cdetect is None:
@@ -54,8 +67,10 @@ def main() -> int:
                 if responded
                 else f"0x{args.address:02x} not detected; scan output: {scan.stdout.strip() or scan.stderr.strip()}"
             )
+            address_ok = responded
             results.append(check("I2C address", responded, detail))
         except Exception as exc:
+            address_ok = False
             results.append(check("I2C address", False, f"0x{args.address:02x} did not respond: {exc}"))
     else:
         print("[SKIP] I2C address: use --probe-address for an optional read-only probe")
@@ -68,6 +83,11 @@ def main() -> int:
         results.append(check("blacknode-hardware", False, str(exc)))
 
     passed = sum(results)
+    if address_ok is False:
+        print()
+        print(paint("CHECK I2C CONNECTION", _RED))
+        print(paint("  Verify controller power, SDA, SCL, and GND wiring.", _YELLOW))
+        print(paint(f"  Expected device address: 0x{args.address:02x} on bus {args.bus}.", _YELLOW))
     print(f"\n{passed}/{len(results)} required checks passed")
     return 0 if all(results) else 1
 
