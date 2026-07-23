@@ -61,6 +61,12 @@ chmod +x scripts/setup_ubuntu.sh
 The setup script installs packages and creates `.venv`. It reports the boot
 configuration needed for I2C but does not silently rewrite system files.
 
+Discover connected serial devices:
+
+```bash
+./discover.sh
+```
+
 ## Development
 
 ```powershell

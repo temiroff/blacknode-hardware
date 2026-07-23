@@ -41,6 +41,8 @@ def main() -> int:
     results.append(check("Linux", platform.system() == "Linux", platform.platform()))
     smbus_ready = importlib.util.find_spec("smbus2") is not None
     results.append(check("smbus2", smbus_ready, "installed" if smbus_ready else "install with: pip install smbus2"))
+    serial_ready = importlib.util.find_spec("serial") is not None
+    results.append(check("pyserial", serial_ready, "installed" if serial_ready else "install with: pip install pyserial"))
     i2cdetect = shutil.which("i2cdetect")
     results.append(check("i2c-tools", i2cdetect is not None, "i2cdetect found" if i2cdetect else "install with: sudo apt install i2c-tools"))
 
