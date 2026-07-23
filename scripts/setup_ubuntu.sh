@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+repo_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$repo_dir"
+
 echo "Blacknode Hardware setup"
 echo "========================"
 
@@ -40,5 +43,8 @@ echo
 echo "Setup finished. If /dev/i2c-1 is missing, enable I2C in /boot/firmware/config.txt:"
 echo "  dtparam=i2c_arm=on"
 echo "Then reboot and run:"
-echo "  source .venv/bin/activate"
-echo "  python scripts/hardware_doctor.py --probe-address --bus 1 --address 0x7A"
+echo "  ./check.sh"
+echo
+echo "To discover and probe serial hardware, run:"
+echo "  ./discover.sh"
+echo "  ./probe.sh"
