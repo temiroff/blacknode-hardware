@@ -84,5 +84,56 @@ curl http://127.0.0.1:8765/capabilities
 ```
 
 It reports an unconfigured device honestly. It does not simulate hardware or
-send commands. The default bind address is local-only; remote access should be
-added only with authentication and an explicit deployment configuration.
+send commands. The direct service command defaults to local-only. The
+`start.sh` launcher below intentionally binds to the LAN interface for PC
+testing; use it only on a trusted network until authentication is added.
+
+## Start on a Raspberry Pi
+
+From the Pi:
+
+```bash
+git pull --ff-only
+source .venv/bin/activate
+sudo ufw allow 8765/tcp
+sudo ufw reload
+./start.sh
+```
+
+The launcher uses:
+
+```text
+host: 0.0.0.0
+port: 8765
+```
+
+It prints the Pi health URL. From your PC, open:
+
+```text
+http://PI_IP_ADDRESS:8765/health
+http://PI_IP_ADDRESS:8765/status
+http://PI_IP_ADDRESS:8765/capabilities
+```
+
+For example:
+
+```text
+http://192.168.1.87:8765/health
+```
+
+To verify the firewall and listener on the Pi:
+
+```bash
+sudo ufw status
+ss -ltnp | grep 8765
+```
+
+From Windows PowerShell:
+
+```powershell
+Test-NetConnection PI_IP_ADDRESS -Port 8765
+```
+
+The health endpoint can work while the status endpoint reports
+`"connected": false`; that means the service is reachable but no physical
+hardware adapter has been configured yet.
