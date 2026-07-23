@@ -1,0 +1,28 @@
+[package]
+name = "blacknode-hardware"
+version = "0.1.0"
+description = "Generic hardware contracts, safe device control, capability inspection, and replaceable device adapters."
+requires-blacknode = ">=0.3.0"
+layer = "hardware"
+component-mode = true
+
+[categories]
+"Hardware" = "#0ea5e9"
+
+[components.core]
+description = "Device capabilities, normalized state, safety contracts, and provider interfaces."
+default = true
+capabilities = ["hardware.contracts", "hardware.state", "hardware.safety"]
+nodes = ["blacknode_hardware"]
+module-root = true
+node-types = ["HardwareCapabilities", "HardwareCommandPreview"]
+
+[components.adapters]
+description = "Replaceable providers for local, network, and platform-specific hardware."
+default = true
+capabilities = ["hardware.adapters"]
+
+[components.mock]
+description = "Hardware-free providers for development, CI, and workflow previews."
+default = true
+capabilities = ["hardware.mock"]
