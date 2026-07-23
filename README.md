@@ -35,27 +35,11 @@ pip install -e .\packages\blacknode-hardware
 
 No device SDK is required for package discovery or contract inspection.
 
-Check a target Linux device before connecting hardware:
-
-```bash
-python scripts/hardware_doctor.py
-python scripts/hardware_doctor.py --probe-address --bus 1 --address 0x7A
-```
-
-The default check does not touch the I2C bus. The optional address probe is
-read-only and does not send motor commands.
-
-When no physical device is connected, check only the software installation:
-
-```bash
-./check.sh --software-only
-```
-
 For a guided Ubuntu setup:
 
 ```bash
-chmod +x scripts/setup_ubuntu.sh
-./scripts/setup_ubuntu.sh
+./setup_ubuntu.sh
+./check.sh --software-only
 ```
 
 The setup script installs packages and creates `.venv`. It reports the boot
@@ -84,6 +68,35 @@ BLACKNODE_SERIAL_BAUDRATE=1000000 \
 ./probe.sh --servos 6
 ```
 
+## Configure the device
+
+Save the detected serial hardware for the device service:
+
+```bash
+./configure.sh --servos 6
+```
+
+The configuration is saved atomically to:
+
+```text
+.blacknode-hardware/device.json
+```
+
+This directory is ignored by Git. Running `configure.sh` again updates the
+same configuration, so the device can be reconfigured at any time:
+
+```bash
+./configure.sh --show
+./configure.sh --servos 7
+./configure.sh --port auto
+./configure.sh --port /dev/serial/by-id/DEVICE_PATH --baudrate 1000000
+./configure.sh --device-id arm-01
+```
+
+Settings not included in a reconfiguration command are preserved. Configuration
+and status monitoring are read-only and never enable torque or send goal
+positions.
+
 ## Development
 
 ```powershell
@@ -95,30 +108,12 @@ The included I2C adapter is the first physical hardware path; it requires
 protocols belong in separate adapters and must implement the same contracts.
 Serial device discovery uses `pyserial` and is installed with the package.
 
-## Device service
-
-The first device-side service milestone can be tested before an adapter is
-configured:
-
-```bash
-python scripts/hardware_service.py
-curl http://127.0.0.1:8765/health
-curl http://127.0.0.1:8765/status
-curl http://127.0.0.1:8765/capabilities
-```
-
-It reports an unconfigured device honestly. It does not simulate hardware or
-send commands. The direct service command defaults to local-only. The
-`start.sh` launcher below intentionally binds to the LAN interface for PC
-testing; use it only on a trusted network until authentication is added.
-
 ## Start on a Raspberry Pi
 
 From the Pi:
 
 ```bash
 git pull --ff-only
-source .venv/bin/activate
 sudo ufw allow 8765/tcp
 sudo ufw reload
 ./start.sh
@@ -145,6 +140,11 @@ For example:
 http://192.168.1.87:8765/health
 ```
 
+`/status` refreshes all configured servo positions on every request. It
+reports both raw ticks and nominal degree values. Until calibration is added,
+the response explicitly reports `"calibrated": false`. The service remains
+read-only: it cannot arm or move the servos.
+
 To verify the firewall and listener on the Pi:
 
 ```bash
@@ -158,6 +158,6 @@ From Windows PowerShell:
 Test-NetConnection PI_IP_ADDRESS -Port 8765
 ```
 
-The health endpoint can work while the status endpoint reports
-`"connected": false`; that means the service is reachable but no physical
-hardware adapter has been configured yet.
+The health endpoint can work while status reports `"connected": false`; that
+means the service is reachable but one or more configured servos did not
+respond. Run `./probe.sh --servos 6` to check the serial connection directly.

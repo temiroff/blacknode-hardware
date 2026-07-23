@@ -14,7 +14,9 @@ Safety requirements:
 - Motion commands require explicit authorization.
 - Commands must expire when their freshness deadline passes.
 - Stop must be idempotent and safe to call repeatedly.
-- Every physical provider needs a hardware-free mock or replay provider.
+- Do not add mock, fake, simulated, or hardcoded hardware providers.
+- Hardware-free tests may validate contracts and configuration but must not
+  pretend that a physical device responded.
 - Optional hardware dependencies must not break package discovery.
 
 Verification:

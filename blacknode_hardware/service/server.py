@@ -58,3 +58,4 @@ def serve(runtime: HardwareRuntime, host: str = "127.0.0.1", port: int = 8765) -
         server.serve_forever()
     finally:
         server.server_close()
+        runtime.close()

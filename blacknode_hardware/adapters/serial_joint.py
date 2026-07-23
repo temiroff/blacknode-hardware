@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import threading
 import time
 from typing import Any
 
@@ -102,6 +103,85 @@ def probe_serial(config: SerialJointConfig) -> dict[str, Any]:
     finally:
         port.closePort()
     return {"ok": bool(readings), "readings": readings, "errors": errors}
+
+
+class SerialJointMonitor:
+    """Read-only serial position monitor that never sends actuator writes."""
+
+    capabilities = ("joint_group", "servo_bus", "position_feedback")
+
+    def __init__(self, config: SerialJointConfig, device_id: str = "device") -> None:
+        if not config.joints:
+            raise ValueError("at least one joint is required")
+        self.config = config
+        self._sdk: Any | None = None
+        self._port: Any | None = None
+        self._packet: Any | None = None
+        self._lock = threading.Lock()
+        self._state = JointGroupState(
+            device_id=device_id,
+            connected=False,
+            armed=False,
+            joint_names=[joint.name for joint in config.joints],
+            positions={},
+            raw_positions={},
+            limits={joint.name: {"min": joint.min_deg, "max": joint.max_deg} for joint in config.joints},
+            calibrated=False,
+        )
+
+    def connect(self) -> JointGroupState:
+        return self.refresh()
+
+    def refresh(self) -> JointGroupState:
+        with self._lock:
+            self._state.updated_at = time.time()
+            if not self._port:
+                try:
+                    self._sdk = load_sdk()
+                    self._port, self._packet = _open(self._sdk, self.config)
+                except Exception as exc:
+                    self._close_port()
+                    self._state.connected = False
+                    self._state.error = str(exc)
+                    return self._state
+
+            positions: dict[str, float] = {}
+            raw_positions: dict[str, int] = {}
+            errors: list[str] = []
+            for joint in self.config.joints:
+                ticks = read_position(self._sdk, self._packet, self._port, joint.servo_id)
+                if ticks is None:
+                    errors.append(f"no response from servo {joint.servo_id} ({joint.name})")
+                    continue
+                raw_positions[joint.name] = ticks
+                positions[joint.name] = ticks_to_degrees(ticks, joint)
+
+            self._state.positions = positions
+            self._state.raw_positions = raw_positions
+            self._state.connected = len(positions) == len(self.config.joints)
+            self._state.error = "; ".join(errors)
+            if not positions:
+                self._close_port()
+            return self._state
+
+    def state(self) -> JointGroupState:
+        return self._state
+
+    def close(self) -> None:
+        with self._lock:
+            self._close_port()
+            self._state.connected = False
+            self._state.updated_at = time.time()
+
+    def _close_port(self) -> None:
+        if self._port:
+            try:
+                self._port.closePort()
+            except Exception:
+                pass
+        self._port = None
+        self._packet = None
+        self._sdk = None
 
 
 class SerialJointGroup:

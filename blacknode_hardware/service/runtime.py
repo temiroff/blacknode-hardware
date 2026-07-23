@@ -19,8 +19,20 @@ class HardwareRuntime:
                 "capabilities": [],
                 "error": "no hardware adapter configured",
             }
-        state = self.provider.state()
-        return state.as_dict() if hasattr(state, "as_dict") else dict(state)
+        try:
+            state = self.provider.refresh() if hasattr(self.provider, "refresh") else self.provider.state()
+            payload = state.as_dict() if hasattr(state, "as_dict") else dict(state)
+        except Exception as exc:
+            payload = {
+                "device_id": self.device_id,
+                "connected": False,
+                "armed": False,
+                "error": str(exc),
+            }
+        payload["device_id"] = self.device_id
+        payload.setdefault("armed", False)
+        payload["capabilities"] = list(getattr(self.provider, "capabilities", ()))
+        return payload
 
     def capabilities(self) -> dict[str, Any]:
         status = self.status()
@@ -33,6 +45,8 @@ class HardwareRuntime:
     def stop(self) -> dict[str, Any]:
         if self.provider is None:
             return {"ok": False, "error": "no hardware adapter configured"}
+        if not hasattr(self.provider, "stop"):
+            return {"ok": False, "error": "hardware adapter is read-only"}
         self.provider.stop()
         if hasattr(self.provider, "disarm"):
             self.provider.disarm()
@@ -50,3 +64,7 @@ class HardwareRuntime:
                 raise RuntimeError(result["error"])
             return result
         raise ValueError(f"unknown method: {method}")
+
+    def close(self) -> None:
+        if self.provider is not None and hasattr(self.provider, "close"):
+            self.provider.close()

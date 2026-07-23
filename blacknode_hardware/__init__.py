@@ -10,7 +10,7 @@ except ModuleNotFoundError as exc:
         raise
 from .adapters import (
     I2CMecanumBase, I2CMecanumConfig, SerialJointConfig,
-    SerialJointGroup, SerialJointSpec, probe_serial,
+    SerialJointGroup, SerialJointMonitor, SerialJointSpec, probe_serial,
 )
 from .joint_group import JointGroupCommand, JointGroupProvider, JointGroupState
 
@@ -24,6 +24,7 @@ __all__ = [
     "I2CMecanumConfig",
     "SerialJointConfig",
     "SerialJointGroup",
+    "SerialJointMonitor",
     "SerialJointSpec",
     "probe_serial",
     "JointGroupCommand",

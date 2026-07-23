@@ -25,7 +25,9 @@ class JointGroupState:
     armed: bool = False
     joint_names: list[str] = field(default_factory=list)
     positions: dict[str, float] = field(default_factory=dict)
+    raw_positions: dict[str, int] = field(default_factory=dict)
     limits: dict[str, dict[str, float]] = field(default_factory=dict)
+    calibrated: bool = False
     error: str = ""
     updated_at: float = field(default_factory=time.time)
 
@@ -36,7 +38,9 @@ class JointGroupState:
             "armed": self.armed,
             "joint_names": list(self.joint_names),
             "positions": dict(self.positions),
+            "raw_positions": dict(self.raw_positions),
             "limits": {name: dict(values) for name, values in self.limits.items()},
+            "calibrated": self.calibrated,
             "error": self.error,
             "updated_at": self.updated_at,
         }

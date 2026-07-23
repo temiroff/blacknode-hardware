@@ -1,12 +1,17 @@
 from __future__ import annotations
 
 import pytest
+from pathlib import Path
+import subprocess
+import sys
 import threading
 from urllib.request import urlopen
 import json
 
 from blacknode_hardware import (
     I2CMecanumBase,
+    SerialJointConfig,
+    SerialJointMonitor,
     SerialJointSpec,
     JointGroupCommand,
     JointGroupState,
@@ -16,6 +21,7 @@ from blacknode_hardware import (
 )
 from blacknode_hardware.service import HardwareRuntime
 from blacknode_hardware.service.server import create_server
+from blacknode_hardware.device_config import load_device_config
 
 
 def test_safety_limits_block_excess_speed():
@@ -57,6 +63,61 @@ def test_serial_joint_position_conversion_is_bounded_and_reversible():
     from blacknode_hardware.adapters.serial_joint import degrees_to_ticks, ticks_to_degrees
     assert degrees_to_ticks(45.0, joint) == 2560
     assert ticks_to_degrees(2560, joint) == 45.0
+
+
+def test_serial_monitor_exposes_no_write_or_motion_methods():
+    monitor = SerialJointMonitor(
+        SerialJointConfig(port="/dev/not-opened", joints=(SerialJointSpec("servo_1", 1),))
+    )
+    assert not hasattr(monitor, "arm")
+    assert not hasattr(monitor, "command")
+    assert not hasattr(monitor, "stop")
+
+
+def test_configuration_can_be_replaced_and_preserves_unspecified_settings(tmp_path: Path):
+    config_path = tmp_path / "device.json"
+    repo_dir = Path(__file__).parents[1]
+    first = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "scripts.configure_device",
+            "--config",
+            str(config_path),
+            "--port",
+            "/dev/serial/by-id/example",
+            "--servos",
+            "6",
+            "--device-id",
+            "arm-01",
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+        cwd=repo_dir,
+    )
+    assert first.returncode == 0, first.stderr
+
+    second = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "scripts.configure_device",
+            "--config",
+            str(config_path),
+            "--servos",
+            "7",
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+        cwd=repo_dir,
+    )
+    assert second.returncode == 0, second.stderr
+    config = load_device_config(config_path)
+    assert config["device_id"] == "arm-01"
+    assert config["port"] == "/dev/serial/by-id/example"
+    assert len(config["servos"]) == 7
 
 
 def test_service_reports_unconfigured_hardware_honestly():
