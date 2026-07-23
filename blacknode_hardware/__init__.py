@@ -10,6 +10,7 @@ except ModuleNotFoundError as exc:
     if exc.name != "blacknode":
         raise
 from .adapters import I2CMecanumBase, I2CMecanumConfig
+from .joint_group import JointGroupCommand, JointGroupProvider, JointGroupState, MockJointGroup
 
 __all__ = [
     "DeviceState",
@@ -20,4 +21,8 @@ __all__ = [
     "SafetyLimits",
     "I2CMecanumBase",
     "I2CMecanumConfig",
+    "JointGroupCommand",
+    "JointGroupProvider",
+    "JointGroupState",
+    "MockJointGroup",
 ]

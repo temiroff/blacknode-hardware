@@ -15,7 +15,7 @@ default = true
 capabilities = ["hardware.contracts", "hardware.state", "hardware.safety"]
 nodes = ["blacknode_hardware"]
 module-root = true
-node-types = ["HardwareCapabilities", "HardwareCommandPreview"]
+node-types = ["HardwareCapabilities", "HardwareCommandPreview", "HardwareJointGroupPreview"]
 
 [components.adapters]
 description = "Replaceable providers for local, network, and platform-specific hardware."

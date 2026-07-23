@@ -14,6 +14,7 @@ The initial foundation is intentionally hardware-independent:
 - command freshness and velocity-limit validation
 - an in-memory mobile-base provider for development and tests
 - a configurable I2C mecanum-base adapter with a mock bus test path
+- a generic joint-group contract and mock provider for arm workflows
 - editor nodes for capability inspection and safe command preview
 
 The next implementation layer can add adapters for USB, serial, I²C, GPIO,

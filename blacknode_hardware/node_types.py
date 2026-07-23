@@ -5,6 +5,7 @@ from __future__ import annotations
 from blacknode.node import Any, Bool, Dict, Float, List, Text, node
 
 from .contracts import MobileBaseCommand
+from .joint_group import JointGroupCommand, MockJointGroup
 from .safety import SafetyGate, SafetyLimits
 
 
@@ -81,3 +82,29 @@ def hardware_command_preview(ctx: dict) -> dict:
         return {"valid": True, "command": payload, "error": "", "report": "command passed safety preview"}
     except Exception as exc:
         return {"valid": False, "command": {}, "error": str(exc), "report": "command blocked by safety preview"}
+
+
+@node(
+    name="HardwareJointGroupPreview",
+    component="core",
+    category=_CATEGORY,
+    description="Validate a generic joint-position command using a hardware-free provider.",
+    inputs={
+        "joint_names": List(default=[]),
+        "positions": Dict(default={}),
+        "limits": Dict(default={}),
+        "armed": Bool(default=False),
+    },
+    outputs={"valid": Bool, "state": Dict, "error": Text, "report": Text},
+)
+def hardware_joint_group_preview(ctx: dict) -> dict:
+    try:
+        names = [str(value) for value in (ctx.get("joint_names") or [])]
+        limits = dict(ctx.get("limits") or {})
+        provider = MockJointGroup(joint_names=names, limits=limits)
+        if bool(ctx.get("armed")):
+            provider.arm()
+        provider.command(JointGroupCommand(positions=dict(ctx.get("positions") or {})))
+        return {"valid": True, "state": provider.state().as_dict(), "error": "", "report": "joint command passed preview"}
+    except Exception as exc:
+        return {"valid": False, "state": {}, "error": str(exc), "report": "joint command blocked by preview"}

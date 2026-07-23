@@ -5,7 +5,9 @@ import pytest
 from blacknode_hardware import (
     I2CMecanumBase,
     I2CMecanumConfig,
+    JointGroupCommand,
     MockMobileBase,
+    MockJointGroup,
     MobileBaseCommand,
     SafetyGate,
     SafetyLimits,
@@ -77,3 +79,24 @@ def test_i2c_provider_watchdog_stops_all_motors():
         (0x7A, 33, [0]),
         (0x7A, 34, [0]),
     ]
+
+
+def test_mock_joint_group_is_disarmed_and_enforces_limits():
+    provider = MockJointGroup(
+        joint_names=["joint_1"],
+        limits={"joint_1": {"min": -1.0, "max": 1.0}},
+    )
+    with pytest.raises(PermissionError):
+        provider.command(JointGroupCommand({"joint_1": 0.2}))
+    provider.arm()
+    provider.command(JointGroupCommand({"joint_1": 0.2}))
+    assert provider.state().positions["joint_1"] == 0.2
+    with pytest.raises(ValueError):
+        provider.command(JointGroupCommand({"joint_1": 2.0}))
+
+
+def test_mock_joint_group_rejects_unknown_joint():
+    provider = MockJointGroup(joint_names=["joint_1"])
+    provider.arm()
+    with pytest.raises(ValueError, match="unknown joints"):
+        provider.command(JointGroupCommand({"joint_2": 0.0}))
