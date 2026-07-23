@@ -35,6 +35,16 @@ pip install -e .\packages\blacknode-hardware
 
 No device SDK is required for package discovery or the mock provider.
 
+Check a target Linux device before connecting hardware:
+
+```bash
+python scripts/hardware_doctor.py
+python scripts/hardware_doctor.py --probe-address --bus 1 --address 0x7A
+```
+
+The default check does not touch the I2C bus. The optional address probe is
+read-only and does not send motor commands.
+
 ## Development
 
 ```powershell
