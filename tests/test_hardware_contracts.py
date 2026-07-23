@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import pytest
+import threading
+from urllib.request import urlopen
+import json
 
 from blacknode_hardware import (
     I2CMecanumBase,
@@ -10,6 +13,8 @@ from blacknode_hardware import (
     SafetyGate,
     SafetyLimits,
 )
+from blacknode_hardware.service import HardwareRuntime
+from blacknode_hardware.service.server import create_server
 
 
 def test_safety_limits_block_excess_speed():
@@ -43,3 +48,30 @@ def test_joint_state_serializes_without_hardware():
     payload = state.as_dict()
     assert payload["device_id"] == "arm-0"
     assert payload["connected"] is False
+
+
+def test_service_reports_unconfigured_hardware_honestly():
+    runtime = HardwareRuntime(device_id="pi-device")
+    assert runtime.status() == {
+        "device_id": "pi-device",
+        "connected": False,
+        "armed": False,
+        "capabilities": [],
+        "error": "no hardware adapter configured",
+    }
+    assert runtime.capabilities()["connected"] is False
+
+
+def test_service_health_and_status_endpoints():
+    server = create_server(HardwareRuntime(device_id="test-device"), port=0)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    base = f"http://127.0.0.1:{server.server_port}"
+    try:
+        with urlopen(f"{base}/health") as response:
+            assert json.loads(response.read())["ok"] is True
+        with urlopen(f"{base}/status") as response:
+            assert json.loads(response.read())["device_id"] == "test-device"
+    finally:
+        server.shutdown()
+        server.server_close()

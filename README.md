@@ -70,3 +70,19 @@ python -m pytest packages\blacknode-hardware\tests
 The included I2C adapter is the first physical hardware path; it requires
 `smbus2` and an explicit device profile. Additional actuator and sensor
 protocols belong in separate adapters and must implement the same contracts.
+
+## Device service
+
+The first device-side service milestone can be tested before an adapter is
+configured:
+
+```bash
+python scripts/hardware_service.py
+curl http://127.0.0.1:8765/health
+curl http://127.0.0.1:8765/status
+curl http://127.0.0.1:8765/capabilities
+```
+
+It reports an unconfigured device honestly. It does not simulate hardware or
+send commands. The default bind address is local-only; remote access should be
+added only with authentication and an explicit deployment configuration.
