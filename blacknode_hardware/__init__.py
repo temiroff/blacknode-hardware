@@ -1,7 +1,6 @@
-"""Hardware-neutral contracts and providers for Blacknode."""
+"""Hardware-neutral contracts and real adapters for Blacknode."""
 
 from .contracts import DeviceState, MobileBaseCommand, MobileBaseProvider
-from .mock import MockMobileBase
 from .safety import SafetyGate, SafetyLimits
 try:
     from . import node_types  # noqa: F401  # registers Blacknode nodes
@@ -10,13 +9,12 @@ except ModuleNotFoundError as exc:
     if exc.name != "blacknode":
         raise
 from .adapters import I2CMecanumBase, I2CMecanumConfig
-from .joint_group import JointGroupCommand, JointGroupProvider, JointGroupState, MockJointGroup
+from .joint_group import JointGroupCommand, JointGroupProvider, JointGroupState
 
 __all__ = [
     "DeviceState",
     "MobileBaseCommand",
     "MobileBaseProvider",
-    "MockMobileBase",
     "SafetyGate",
     "SafetyLimits",
     "I2CMecanumBase",
@@ -24,5 +22,4 @@ __all__ = [
     "JointGroupCommand",
     "JointGroupProvider",
     "JointGroupState",
-    "MockJointGroup",
 ]

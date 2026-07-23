@@ -1,4 +1,4 @@
-"""Generic joint-group contracts and a hardware-free provider."""
+"""Generic joint-group contracts for real actuator adapters."""
 
 from __future__ import annotations
 
@@ -52,60 +52,3 @@ class JointGroupProvider(Protocol):
     def command(self, command: JointGroupCommand) -> JointGroupState: ...
 
     def stop(self) -> JointGroupState: ...
-
-
-class MockJointGroup:
-    """Safe provider for arm workflows without physical hardware."""
-
-    def __init__(
-        self,
-        device_id: str = "mock-joint-group",
-        joint_names: list[str] | None = None,
-        limits: dict[str, dict[str, float]] | None = None,
-    ) -> None:
-        names = list(joint_names or [])
-        self._state = JointGroupState(
-            device_id=device_id,
-            connected=True,
-            joint_names=names,
-            positions={name: 0.0 for name in names},
-            limits={name: dict(values) for name, values in (limits or {}).items()},
-        )
-
-    def state(self) -> JointGroupState:
-        return self._state
-
-    def arm(self) -> JointGroupState:
-        self._state.armed = True
-        self._state.updated_at = time.time()
-        return self._state
-
-    def disarm(self) -> JointGroupState:
-        self.stop()
-        self._state.armed = False
-        self._state.updated_at = time.time()
-        return self._state
-
-    def command(self, command: JointGroupCommand) -> JointGroupState:
-        if not self._state.armed:
-            raise PermissionError("joint motion is disarmed")
-        if not command.is_fresh():
-            raise TimeoutError("joint command is stale")
-        unknown = sorted(set(command.positions) - set(self._state.joint_names))
-        if unknown:
-            raise ValueError(f"unknown joints: {', '.join(unknown)}")
-        for name, position in command.positions.items():
-            limits = self._state.limits.get(name, {})
-            low = limits.get("min")
-            high = limits.get("max")
-            if low is not None and position < low:
-                raise ValueError(f"{name} is below its minimum limit")
-            if high is not None and position > high:
-                raise ValueError(f"{name} is above its maximum limit")
-        self._state.positions.update({name: float(value) for name, value in command.positions.items()})
-        self._state.updated_at = time.time()
-        return self._state
-
-    def stop(self) -> JointGroupState:
-        self._state.updated_at = time.time()
-        return self._state

@@ -15,14 +15,9 @@ default = true
 capabilities = ["hardware.contracts", "hardware.state", "hardware.safety"]
 nodes = ["blacknode_hardware"]
 module-root = true
-node-types = ["HardwareCapabilities", "HardwareCommandPreview", "HardwareJointGroupPreview"]
+node-types = ["HardwareCapabilities"]
 
 [components.adapters]
 description = "Replaceable providers for local, network, and platform-specific hardware."
 default = true
 capabilities = ["hardware.adapters"]
-
-[components.mock]
-description = "Hardware-free providers for development, CI, and workflow previews."
-default = true
-capabilities = ["hardware.mock"]

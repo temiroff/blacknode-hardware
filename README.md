@@ -12,10 +12,9 @@ The initial foundation is intentionally hardware-independent:
 - capability and device-state contracts
 - disarmed-by-default motion authorization
 - command freshness and velocity-limit validation
-- an in-memory mobile-base provider for development and tests
-- a configurable I2C mecanum-base adapter with a mock bus test path
-- a generic joint-group contract and mock provider for arm workflows
-- editor nodes for capability inspection and safe command preview
+- a configurable I2C mecanum-base adapter
+- a generic joint-group contract for real actuator adapters
+- an editor node for capability inspection
 
 The next implementation layer can add adapters for USB, serial, I²C, GPIO,
 CAN, ROS 2, or a network hardware service without changing workflow names.
@@ -34,7 +33,7 @@ Or install the package checkout directly during development:
 pip install -e .\packages\blacknode-hardware
 ```
 
-No device SDK is required for package discovery or the mock provider.
+No device SDK is required for package discovery or contract inspection.
 
 Check a target Linux device before connecting hardware:
 
@@ -68,7 +67,6 @@ configuration needed for I2C but does not silently rewrite system files.
 python -m pytest packages\blacknode-hardware\tests
 ```
 
-The mock provider is used for hardware-free development. The included I2C
-adapter is the first physical hardware path; it requires `smbus2` and a device
-profile. Add further providers only after their command, state, shutdown, and
-safety contracts pass against the mock provider.
+The included I2C adapter is the first physical hardware path; it requires
+`smbus2` and an explicit device profile. Additional actuator and sensor
+protocols belong in separate adapters and must implement the same contracts.
